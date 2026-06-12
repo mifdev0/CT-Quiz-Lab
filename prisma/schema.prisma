@@ -1,0 +1,229 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  TEACHER
+  STUDENT
+}
+
+enum CTPillar {
+  DECOMPOSITION
+  PATTERN_RECOGNITION
+  ABSTRACTION
+  ALGORITHMIC_THINKING
+}
+
+enum TestType {
+  PRE_TEST
+  POST_TEST
+}
+
+enum ProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum ChallengeType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SELECT_RELEVANT_INFO
+  ORDER_STEPS
+  SHORT_ANSWER
+}
+
+model User {
+  id                 String                  @id @default(cuid())
+  name               String
+  email              String                  @unique
+  passwordHash       String
+  role               UserRole
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  missionsCreated    Mission[]               @relation("TeacherMissions")
+  materialsCreated   Material[]              @relation("TeacherMaterials")
+  testAnswers        StudentTestAnswer[]
+  challengeAnswers   StudentChallengeAnswer[]
+  missionProgress    StudentMissionProgress[]
+  materialReads      StudentMaterialRead[]
+  badges             StudentBadge[]
+}
+
+model Material {
+  id          String                @id @default(cuid())
+  title       String
+  content     String
+  createdById String
+  createdBy   User                  @relation("TeacherMaterials", fields: [createdById], references: [id])
+  missions    Mission[]
+  reads       StudentMaterialRead[]
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+}
+
+model Mission {
+  id          String      @id @default(cuid())
+  title       String
+  description String
+  storyIntro  String
+  materialId  String?
+  material    Material?   @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  createdById String
+  createdBy   User        @relation("TeacherMissions", fields: [createdById], references: [id])
+  levels      CTLevel[]
+  tests       Test[]
+  progress    StudentMissionProgress[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model StudentMaterialRead {
+  id         String   @id @default(cuid())
+  studentId  String
+  student    User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  materialId String
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  readAt     DateTime @default(now())
+
+  @@unique([studentId, materialId])
+}
+
+model CTLevel {
+  id          String      @id @default(cuid())
+  missionId   String
+  mission     Mission     @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  pillar      CTPillar
+  title       String
+  description String
+  order       Int
+  challenges  Challenge[]
+
+  @@unique([missionId, order])
+}
+
+model Challenge {
+  id              String                   @id @default(cuid())
+  levelId         String
+  level           CTLevel                  @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  type            ChallengeType
+  prompt          String
+  correctAnswer   Json
+  score           Int                      @default(10)
+  feedbackCorrect String
+  feedbackWrong   String
+  options         ChallengeOption[]
+  answers         StudentChallengeAnswer[]
+}
+
+model ChallengeOption {
+  id          String    @id @default(cuid())
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  text        String
+  isCorrect   Boolean   @default(false)
+  order       Int
+}
+
+model Test {
+  id        String         @id @default(cuid())
+  missionId String
+  mission   Mission        @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  type      TestType
+  title     String
+  questions TestQuestion[]
+
+  @@unique([missionId, type])
+}
+
+model TestQuestion {
+  id            String              @id @default(cuid())
+  testId        String
+  test          Test                @relation(fields: [testId], references: [id], onDelete: Cascade)
+  pillar        CTPillar
+  type          ChallengeType
+  prompt        String
+  correctAnswer Json
+  score         Int                 @default(10)
+  options       TestOption[]
+  answers       StudentTestAnswer[]
+}
+
+model TestOption {
+  id         String       @id @default(cuid())
+  questionId String
+  question   TestQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text       String
+  isCorrect  Boolean      @default(false)
+  order      Int
+}
+
+model StudentTestAnswer {
+  id             String       @id @default(cuid())
+  studentId      String
+  student        User         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  testQuestionId String
+  testQuestion   TestQuestion @relation(fields: [testQuestionId], references: [id], onDelete: Cascade)
+  answer         Json
+  isCorrect      Boolean
+  scoreObtained  Int
+  aiScore        Int?
+  aiFeedback     String?
+  needsReview    Boolean      @default(false)
+  submittedAt    DateTime     @default(now())
+}
+
+model StudentChallengeAnswer {
+  id            String    @id @default(cuid())
+  studentId     String
+  student       User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  challengeId   String
+  challenge     Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  answer        Json
+  isCorrect     Boolean
+  scoreObtained Int
+  aiScore       Int?
+  aiFeedback    String?
+  needsReview   Boolean   @default(false)
+  attemptCount  Int       @default(1)
+  submittedAt   DateTime  @default(now())
+}
+
+model StudentMissionProgress {
+  id                 String         @id @default(cuid())
+  studentId          String
+  student            User           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  missionId          String
+  mission            Mission        @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  currentLevelOrder  Int            @default(1)
+  status             ProgressStatus @default(NOT_STARTED)
+  startedAt          DateTime?
+  completedAt        DateTime?
+  updatedAt          DateTime       @updatedAt
+
+  @@unique([studentId, missionId])
+}
+
+model Badge {
+  id          String         @id @default(cuid())
+  name        String
+  description String
+  criteria    Json
+  students    StudentBadge[]
+}
+
+model StudentBadge {
+  id        String   @id @default(cuid())
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  badgeId   String
+  badge     Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  earnedAt  DateTime @default(now())
+
+  @@unique([studentId, badgeId])
+}
