@@ -166,80 +166,78 @@ export async function generateInstantMissionAction(formData: FormData) {
 
   try {
     const generated = await generateMissionPackageWithGroq(prompt);
-    await prisma.$transaction(async (tx) => {
-      const mission = await tx.mission.create({
-        data: {
-          title: generated.title,
-          description: generated.description,
-          storyIntro: material.content,
-          materialId: material.id,
-          createdById: teacher.id,
-          levels: {
-            create: [
-              { order: 1, pillar: CTPillar.DECOMPOSITION, title: "Decomposition - Pecah Masalah", description: "Memecah masalah besar menjadi beberapa bagian kecil yang bisa diselidiki." },
-              { order: 2, pillar: CTPillar.PATTERN_RECOGNITION, title: "Pattern Recognition - Cari Pola", description: "Menemukan pola dari data atau kejadian yang berulang." },
-              { order: 3, pillar: CTPillar.ABSTRACTION, title: "Abstraction - Pilih Informasi Penting", description: "Memilih informasi penting dan mengabaikan pengecoh." },
-              { order: 4, pillar: CTPillar.ALGORITHMIC_THINKING, title: "Algorithmic Thinking - Susun Langkah", description: "Menyusun urutan solusi yang logis dan bisa diikuti." }
-            ]
-          },
-          tests: {
-            create: [
-              { type: TestType.PRE_TEST, title: "Bank Soal A" },
-              { type: TestType.POST_TEST, title: "Bank Soal B" }
-            ]
-          }
+    const mission = await prisma.mission.create({
+      data: {
+        title: generated.title,
+        description: generated.description,
+        storyIntro: material.content,
+        materialId: material.id,
+        createdById: teacher.id,
+        levels: {
+          create: [
+            { order: 1, pillar: CTPillar.DECOMPOSITION, title: "Decomposition - Pecah Masalah", description: "Memecah masalah besar menjadi beberapa bagian kecil yang bisa diselidiki." },
+            { order: 2, pillar: CTPillar.PATTERN_RECOGNITION, title: "Pattern Recognition - Cari Pola", description: "Menemukan pola dari data atau kejadian yang berulang." },
+            { order: 3, pillar: CTPillar.ABSTRACTION, title: "Abstraction - Pilih Informasi Penting", description: "Memilih informasi penting dan mengabaikan pengecoh." },
+            { order: 4, pillar: CTPillar.ALGORITHMIC_THINKING, title: "Algorithmic Thinking - Susun Langkah", description: "Menyusun urutan solusi yang logis dan bisa diikuti." }
+          ]
         },
-        include: { levels: true, tests: true }
-      });
-
-      const createQuestion = async (testType: TestType, item: Awaited<ReturnType<typeof generateMissionPackageWithGroq>>["preTest"][number]) => {
-        const test = mission.tests.find((row) => row.type === testType);
-        if (!test) return;
-        await tx.testQuestion.create({
-          data: {
-            testId: test.id,
-            pillar: item.pillar as CTPillar,
-            type: item.type as ChallengeType,
-            prompt: item.prompt,
-            correctAnswer: item.answer,
-            score: 10,
-            options: item.type === "SHORT_ANSWER" ? undefined : {
-              create: (item.options || []).map((option, index) => ({
-                text: option,
-                isCorrect: option === item.answer,
-                order: index + 1
-              }))
-            }
-          }
-        });
-      };
-
-      for (const item of generated.preTest) await createQuestion(TestType.PRE_TEST, item);
-      for (const item of generated.postTest) await createQuestion(TestType.POST_TEST, item);
-
-      for (const item of generated.challenges) {
-        const level = mission.levels.find((row) => row.pillar === item.pillar);
-        if (!level) continue;
-        await tx.challenge.create({
-          data: {
-            levelId: level.id,
-            type: item.type as ChallengeType,
-            prompt: item.prompt,
-            correctAnswer: item.answer,
-            score: 10,
-            feedbackCorrect: item.feedbackCorrect,
-            feedbackWrong: item.feedbackWrong,
-            options: item.type === "SHORT_ANSWER" ? undefined : {
-              create: (item.options || []).map((option, index) => ({
-                text: option,
-                isCorrect: option === item.answer,
-                order: index + 1
-              }))
-            }
-          }
-        });
-      }
+        tests: {
+          create: [
+            { type: TestType.PRE_TEST, title: "Bank Soal A" },
+            { type: TestType.POST_TEST, title: "Bank Soal B" }
+          ]
+        }
+      },
+      include: { levels: true, tests: true }
     });
+
+    const createQuestion = async (testType: TestType, item: Awaited<ReturnType<typeof generateMissionPackageWithGroq>>["preTest"][number]) => {
+      const test = mission.tests.find((row) => row.type === testType);
+      if (!test) return;
+      await prisma.testQuestion.create({
+        data: {
+          testId: test.id,
+          pillar: item.pillar as CTPillar,
+          type: item.type as ChallengeType,
+          prompt: item.prompt,
+          correctAnswer: item.answer,
+          score: 10,
+          options: item.type === "SHORT_ANSWER" ? undefined : {
+            create: (item.options || []).map((option, index) => ({
+              text: option,
+              isCorrect: option === item.answer,
+              order: index + 1
+            }))
+          }
+        }
+      });
+    };
+
+    for (const item of generated.preTest) await createQuestion(TestType.PRE_TEST, item);
+    for (const item of generated.postTest) await createQuestion(TestType.POST_TEST, item);
+
+    for (const item of generated.challenges) {
+      const level = mission.levels.find((row) => row.pillar === item.pillar);
+      if (!level) continue;
+      await prisma.challenge.create({
+        data: {
+          levelId: level.id,
+          type: item.type as ChallengeType,
+          prompt: item.prompt,
+          correctAnswer: item.answer,
+          score: 10,
+          feedbackCorrect: item.feedbackCorrect,
+          feedbackWrong: item.feedbackWrong,
+          options: item.type === "SHORT_ANSWER" ? undefined : {
+            create: (item.options || []).map((option, index) => ({
+              text: option,
+              isCorrect: option === item.answer,
+              order: index + 1
+            }))
+          }
+        }
+      });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "AI gagal membuat kuis";
     setFlash("error", message);
