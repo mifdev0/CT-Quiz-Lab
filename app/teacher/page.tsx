@@ -1,7 +1,7 @@
 import { BookOpenCheck, ChartNoAxesCombined, ClipboardCheck, UsersRound } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ButtonLink, Card, Metric, ProgressBar } from "@/components/ui";
-import { pillars, teacherNav } from "@/lib/app-data";
+import { learningOutcomes, teacherNav } from "@/lib/app-data";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { CTPillar, UserRole } from "@prisma/client";
@@ -15,31 +15,47 @@ const pillarMap: Record<string, CTPillar> = {
 
 export default async function TeacherDashboard() {
   const user = await requireUser(UserRole.TEACHER);
-  const [missions, studentRows, challengeAnswers] = await Promise.all([
-    prisma.mission.findMany({ where: { createdById: user.id }, include: { tests: { include: { questions: true } }, levels: { include: { challenges: true } } } }),
+  const [missions, studentRows] = await Promise.all([
+    prisma.mission.findMany({
+      where: { createdById: user.id },
+      select: {
+        id: true,
+        title: true,
+        levels: { select: { _count: { select: { challenges: true } } } }
+      },
+      orderBy: { createdAt: "desc" }
+    }),
     prisma.user.findMany({
       where: { role: UserRole.STUDENT },
-      include: {
-        testAnswers: { include: { testQuestion: { include: { test: true } } } },
-        challengeAnswers: { include: { challenge: { include: { level: true } } } }
+      select: {
+        id: true,
+        name: true,
+        challengeAnswers: {
+          where: { challenge: { level: { mission: { createdById: user.id } } } },
+          select: {
+            isCorrect: true,
+            aiFeedback: true,
+            challenge: { select: { level: { select: { pillar: true } } } }
+          }
+        }
       },
       orderBy: { name: "asc" }
-    }),
-    prisma.studentChallengeAnswer.findMany({ include: { challenge: { include: { level: true } } } })
+    })
   ]);
+  const challengeAnswers = studentRows.flatMap((student) => student.challengeAnswers);
   const challengeAvg = challengeAnswers.length ? Math.round((challengeAnswers.filter((answer) => answer.isCorrect).length / challengeAnswers.length) * 100) : 0;
   const pillarScore = (pillar: CTPillar) => {
     const rows = challengeAnswers.filter((answer) => answer.challenge.level.pillar === pillar);
     return rows.length ? Math.round((rows.filter((answer) => answer.isCorrect).length / rows.length) * 100) : 0;
   };
-  const pillarValues = pillars.map((pillar) => ({ ...pillar, value: pillarScore(pillarMap[pillar.key]) }));
+  const pillarValues = learningOutcomes.map((pillar) => ({ ...pillar, value: pillarScore(pillarMap[pillar.key]) }));
   const weakestPillar = pillarValues.filter((pillar) => pillar.value > 0).sort((a, b) => a.value - b.value)[0];
   const studentsNeedSupport = studentRows
     .map((student) => {
       const totalAnswers = student.challengeAnswers.length;
       const correctAnswers = student.challengeAnswers.filter((answer) => answer.isCorrect).length;
       const accuracy = totalAnswers ? Math.round((correctAnswers / totalAnswers) * 100) : 0;
-      const pillarScores = pillars.map((pillar) => {
+      const pillarScores = learningOutcomes.map((pillar) => {
         const rows = student.challengeAnswers.filter((answer) => answer.challenge.level.pillar === pillarMap[pillar.key]);
         return {
           label: pillar.title,
@@ -54,7 +70,7 @@ export default async function TeacherDashboard() {
         name: student.name,
         accuracy,
         totalAnswers,
-        weakLabel: weak?.label || "Belum ada data pilar",
+        weakLabel: weak?.label || "Belum ada data capaian",
         weakScore: weak?.value ?? 0,
         aiNotes: aiNotes.length
       };
@@ -75,7 +91,7 @@ export default async function TeacherDashboard() {
                 </p>
                 <h2 className="mt-3 text-3xl font-black leading-tight text-white">Pantau pemahaman CT siswa dari kuis interaktif</h2>
                 <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-white/75">
-                  Lihat jumlah kuis, jawaban siswa, aspek CT yang masih lemah, dan catatan AI untuk jawaban essay.
+                  Lihat jumlah kuis, jawaban siswa, capaian pembelajaran yang perlu diperkuat, dan catatan AI untuk jawaban essay.
                 </p>
               </div>
             </div>
@@ -93,7 +109,7 @@ export default async function TeacherDashboard() {
             </h2>
             {!challengeAnswers.length ? (
               <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">
-                Analisis akan muncul setelah siswa mengerjakan soal interaktif CT.
+                Analisis capaian akan muncul setelah siswa mengerjakan kuis.
               </p>
             ) : null}
             <div className="mt-4 grid gap-4">
@@ -163,8 +179,8 @@ export default async function TeacherDashboard() {
                   {missions.map((mission) => (
                     <tr key={mission.id} className="border-t-2 border-slate-100">
                       <td className="p-3 font-black text-ink">{mission.title}</td>
-                      <td className="p-3 font-semibold">{mission.levels.reduce((sum, level) => sum + level.challenges.length, 0)} soal</td>
-                      <td className="p-3 font-semibold text-slate-600">{mission.levels.some((level) => level.challenges.length) ? "Siap dikerjakan" : "Belum ada soal"}</td>
+                      <td className="p-3 font-semibold">{mission.levels.reduce((sum, level) => sum + level._count.challenges, 0)} soal</td>
+                      <td className="p-3 font-semibold text-slate-600">{mission.levels.some((level) => level._count.challenges) ? "Siap dikerjakan" : "Belum ada soal"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -192,9 +208,9 @@ export default async function TeacherDashboard() {
             <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">
               {challengeAnswers.length
                 ? weakestPillar
-                  ? `Aspek yang paling perlu ditingkatkan adalah ${weakestPillar.title} dengan rata-rata ${weakestPillar.value}%. Guru dapat menambah latihan dan contoh pada pilar ini.`
-                  : "Data soal interaktif sudah masuk, tetapi belum cukup untuk menentukan pilar terlemah."
-                : "Buat kuis dari materi, lalu AI akan menyiapkan soal quiz yang memuat empat pilar CT. Setelah siswa mengerjakan, bagian ini akan menampilkan aspek CT yang perlu diperkuat."}
+                  ? `Capaian yang paling perlu ditingkatkan adalah ${weakestPillar.title} dengan rata-rata ${weakestPillar.value}%. Guru dapat menambah contoh dan latihan yang sesuai.`
+                  : "Data jawaban sudah masuk, tetapi belum cukup untuk menentukan capaian yang perlu diperkuat."
+                : "Buat kuis dari materi. Setelah siswa mengerjakan, bagian ini akan menampilkan capaian pembelajaran yang perlu diperkuat."}
             </p>
             {studentsNeedSupport.length ? (
               <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">

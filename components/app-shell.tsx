@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { BookOpenCheck, GraduationCap, LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { GraduationCap, LogOut, ShieldCheck, UserRound } from "lucide-react";
 import { logoutAction } from "@/app/actions";
+import { AppNavigation } from "@/components/app-navigation";
 
 type NavItem = {
   href: string;
@@ -47,18 +48,7 @@ export function AppShell({
               </form>
             </div>
           </div>
-          <nav className="flex gap-2 overflow-x-auto pb-1">
-            {nav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border-2 border-slate-200 bg-white/95 px-3 text-sm font-black text-ink shadow-sm transition hover:-translate-y-0.5 hover:border-sky hover:bg-sky/10"
-              >
-                <BookOpenCheck size={16} aria-hidden="true" />
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+          <AppNavigation items={nav} />
         </div>
       </header>
       <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">{children}</div>

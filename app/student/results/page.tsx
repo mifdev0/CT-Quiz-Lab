@@ -1,7 +1,7 @@
 import { BadgeCheck, Eye, Lightbulb } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Card, Metric, ProgressBar } from "@/components/ui";
-import { pillars, studentNav } from "@/lib/app-data";
+import { learningOutcomes, studentNav } from "@/lib/app-data";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { CTPillar, UserRole } from "@prisma/client";
@@ -57,13 +57,13 @@ export default async function StudentResultsPage() {
       missionGroups.set(missionId, {
         mission: { id: missionId, title: answer.challenge.level.mission.title },
         answers: [],
-        pillarScores: pillars.map((p) => ({ ...p, value: 0, attempted: 0 }))
+        pillarScores: learningOutcomes.map((p) => ({ ...p, value: 0, attempted: 0 }))
       });
     }
     missionGroups.get(missionId)!.answers.push(answer);
   }
   for (const [, group] of missionGroups) {
-    group.pillarScores = pillars.map((pillar) => {
+    group.pillarScores = learningOutcomes.map((pillar) => {
       const rows = group.answers.filter((a) => a.challenge.level.pillar === pillarMap[pillar.key]);
       return { ...pillar, value: percent(rows.filter((a) => a.isCorrect).length, rows.length), attempted: rows.length };
     });
@@ -120,7 +120,7 @@ export default async function StudentResultsPage() {
 
               <div className="mt-5 grid gap-4 lg:grid-cols-2">
                 <div className="rounded-lg border-2 border-slate-100 p-4">
-                  <h3 className="text-xl font-black text-ink">Skor per Pilar CT</h3>
+                  <h3 className="text-xl font-black text-ink">Capaian Pembelajaran</h3>
                   <div className="mt-4 grid gap-3">
                     {group.pillarScores.map((pillar) => (
                       <div key={pillar.key}>

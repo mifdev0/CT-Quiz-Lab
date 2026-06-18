@@ -1,8 +1,9 @@
 import { ChartNoAxesCombined } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Card, Metric, ProgressBar } from "@/components/ui";
-import { pillars, teacherNav } from "@/lib/app-data";
+import { learningOutcomes, teacherNav } from "@/lib/app-data";
 import { Notice } from "@/components/notice";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { resetStudentMissionAction } from "@/app/actions";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -18,12 +19,12 @@ const pillarMap: Record<string, CTPillar> = {
 type StudentWithAnswers = Awaited<ReturnType<typeof getStudents>>[number];
 type MissionWithContent = Awaited<ReturnType<typeof getMissions>>[number];
 
-function getStudents() {
+function getStudents(teacherId: string) {
   return prisma.user.findMany({
     where: { role: UserRole.STUDENT },
     include: {
-      testAnswers: { include: { testQuestion: { include: { test: true } } } },
       challengeAnswers: {
+        where: { challenge: { level: { mission: { createdById: teacherId } } } },
         include: {
           challenge: {
             include: {
@@ -42,7 +43,6 @@ function getMissions(teacherId: string) {
   return prisma.mission.findMany({
     where: { createdById: teacherId },
     include: {
-      tests: { include: { questions: true } },
       levels: { include: { challenges: true }, orderBy: { order: "asc" } }
     },
     orderBy: { createdAt: "desc" }
@@ -72,19 +72,16 @@ function answerStatus(isCorrect: boolean) {
 }
 
 function missionAnswers(student: StudentWithAnswers, mission: MissionWithContent) {
-  const testAnswers = student.testAnswers.filter((answer) => answer.testQuestion.test.missionId === mission.id);
   const challengeAnswers = student.challengeAnswers.filter((answer) => answer.challenge.level.missionId === mission.id);
-  return { testAnswers, challengeAnswers };
+  return { challengeAnswers };
 }
 
 function analyzeStudentMission(student: StudentWithAnswers, mission: MissionWithContent) {
-  const { testAnswers, challengeAnswers } = missionAnswers(student, mission);
-  const pre = testAnswers.filter((answer) => answer.testQuestion.test.type === "PRE_TEST");
-  const post = testAnswers.filter((answer) => answer.testQuestion.test.type === "POST_TEST");
+  const { challengeAnswers } = missionAnswers(student, mission);
   const total = challengeAnswers.length;
   const correct = challengeAnswers.filter((answer) => answer.isCorrect).length;
   const accuracy = percent(correct, total);
-  const pillarScores = pillars.map((pillar) => {
+  const pillarScores = learningOutcomes.map((pillar) => {
     const rows = challengeAnswers.filter((answer) => answer.challenge.level.pillar === pillarMap[pillar.key]);
     return {
       ...pillar,
@@ -100,16 +97,12 @@ function analyzeStudentMission(student: StudentWithAnswers, mission: MissionWith
     : accuracy < 60
       ? "Perlu pendampingan intensif dan reset jika guru ingin siswa mengulang."
       : weakest && weakest.value < 70
-        ? `Perlu latihan tambahan pada ${weakest.title}.`
+        ? `Perlu latihan tambahan untuk capaian ${weakest.title}.`
         : aiReviews.some((answer) => !answer.isCorrect)
           ? "Tinjau feedback AI pada jawaban essay."
           : "Pemahaman kuis ini cukup baik.";
 
   return {
-    preCorrect: pre.filter((answer) => answer.isCorrect).length,
-    preTotal: pre.length,
-    postCorrect: post.filter((answer) => answer.isCorrect).length,
-    postTotal: post.length,
     challengeCorrect: challengeAnswers.filter((answer) => answer.isCorrect).length,
     challengeTotal: challengeAnswers.length,
     accuracy,
@@ -124,24 +117,20 @@ function analyzeStudentMission(student: StudentWithAnswers, mission: MissionWith
 function missionSummary(students: StudentWithAnswers[], mission: MissionWithContent) {
   const analyses = students.map((student) => analyzeStudentMission(student, mission));
   const attempted = analyses.filter((item) => item.challengeTotal > 0);
-  const preCorrect = analyses.reduce((sum, item) => sum + item.preCorrect, 0);
-  const preTotal = analyses.reduce((sum, item) => sum + item.preTotal, 0);
-  const postCorrect = analyses.reduce((sum, item) => sum + item.postCorrect, 0);
-  const postTotal = analyses.reduce((sum, item) => sum + item.postTotal, 0);
   const challengeCorrect = analyses.reduce((sum, item) => sum + item.challengeCorrect, 0);
   const challengeTotal = analyses.reduce((sum, item) => sum + item.challengeTotal, 0);
-  const pillarScores = pillars.map((pillar) => {
+  const pillarScores = learningOutcomes.map((pillar) => {
     const rows = students.flatMap((student) => missionAnswers(student, mission).challengeAnswers)
       .filter((answer) => answer.challenge.level.pillar === pillarMap[pillar.key]);
     return { ...pillar, value: percent(rows.filter((answer) => answer.isCorrect).length, rows.length), attempted: rows.length };
   });
   const weakest = pillarScores.filter((pillar) => pillar.attempted).sort((a, b) => a.value - b.value)[0];
-  return { attempted, preCorrect, preTotal, postCorrect, postTotal, challengeCorrect, challengeTotal, pillarScores, weakest };
+  return { attempted, challengeCorrect, challengeTotal, pillarScores, weakest };
 }
 
 export default async function ReportsPage({ searchParams }: { searchParams?: { success?: string; error?: string } }) {
   const user = await requireUser(UserRole.TEACHER);
-  const [students, missions] = await Promise.all([getStudents(), getMissions(user.id)]);
+  const [students, missions] = await Promise.all([getStudents(user.id), getMissions(user.id)]);
   const allAnalyses = missions.flatMap((mission) => students.map((student) => analyzeStudentMission(student, mission)));
   const activeStudents = new Set(
     students.filter((student) => missions.some((mission) => {
@@ -152,7 +141,7 @@ export default async function ReportsPage({ searchParams }: { searchParams?: { s
   const supportCount = allAnalyses.filter((item) => item.needsSupport).length;
 
   return (
-    <AppShell role="Guru" title="Laporan CT" nav={teacherNav} userName={user.name}>
+    <AppShell role="Guru" title="Laporan Hasil Belajar" nav={teacherNav} userName={user.name}>
       <div className="space-y-5">
         <Notice success={searchParams?.success} error={searchParams?.error} />
 
@@ -197,7 +186,7 @@ export default async function ReportsPage({ searchParams }: { searchParams?: { s
 
                 <div className="mt-5 grid gap-4 lg:grid-cols-2">
                   <div className="rounded-lg border-2 border-slate-100 p-4">
-                    <h3 className="text-xl font-black text-ink">Analisis Pilar Kuis</h3>
+                    <h3 className="text-xl font-black text-ink">Capaian Pembelajaran</h3>
                     <div className="mt-4 grid gap-3">
                       {summary.pillarScores.map((pillar) => (
                         <div key={pillar.key}>
@@ -211,8 +200,8 @@ export default async function ReportsPage({ searchParams }: { searchParams?: { s
                     </div>
                     <p className="mt-4 text-sm font-semibold leading-6 text-slate-600">
                       {summary.weakest
-                        ? `Aspek paling perlu ditingkatkan pada kuis ini adalah ${summary.weakest.title} (${summary.weakest.value}%).`
-                        : "Belum cukup data untuk menentukan aspek terlemah."}
+                        ? `Capaian yang paling perlu ditingkatkan pada kuis ini adalah ${summary.weakest.title} (${summary.weakest.value}%).`
+                        : "Belum cukup data untuk menentukan capaian yang perlu diperkuat."}
                     </p>
                   </div>
 
@@ -256,7 +245,7 @@ export default async function ReportsPage({ searchParams }: { searchParams?: { s
                                 <summary className="cursor-pointer font-black text-leafDark">Detail</summary>
                                 <div className="mt-3 space-y-3 font-semibold leading-6 text-slate-600">
                                   <p>Akurasi total: {analysis.accuracy}%</p>
-                                  <p>Aspek lemah: {analysis.weakest ? `${analysis.weakest.title} (${analysis.weakest.value}%)` : "Belum ada data"}</p>
+                                  <p>Capaian yang perlu diperkuat: {analysis.weakest ? `${analysis.weakest.title} (${analysis.weakest.value}%)` : "Belum ada data"}</p>
                                   <p>Rekomendasi: {analysis.recommendation}</p>
                                   <details className="rounded-lg border-2 border-slate-100 p-2" open>
                                     <summary className="cursor-pointer font-black text-ink">Jawaban Kuis ({analysis.challengeTotal})</summary>
@@ -306,7 +295,12 @@ export default async function ReportsPage({ searchParams }: { searchParams?: { s
                               <form action={resetStudentMissionAction} className="flex gap-2">
                                 <input type="hidden" name="studentId" value={student.id} />
                                 <input type="hidden" name="missionId" value={mission.id} />
-                                <button className="h-10 rounded-lg border-2 border-coral bg-white px-3 font-black text-coral">Reset</button>
+                                <ConfirmSubmitButton
+                                  message={`Apakah yakin ingin mereset hasil kuis ${student.name}? Semua jawaban siswa pada kuis ini akan dihapus.`}
+                                  className="h-10 rounded-lg border-2 border-coral bg-white px-3 font-black text-coral"
+                                >
+                                  Reset
+                                </ConfirmSubmitButton>
                               </form>
                             </td>
                           </tr>

@@ -8,16 +8,25 @@ import { UserRole } from "@prisma/client";
 
 export default async function StudentDashboard() {
   const user = await requireUser(UserRole.STUDENT);
-  const missions = await prisma.mission.findMany({
-    include: { material: true, tests: { include: { questions: true } }, levels: { include: { challenges: true } } },
-    orderBy: { createdAt: "desc" }
-  });
-  const materialReads = await prisma.studentMaterialRead.findMany({ where: { studentId: user.id } });
-  const progress = await prisma.studentMissionProgress.findMany({ where: { studentId: user.id } });
-  const challengeAnswers = await prisma.studentChallengeAnswer.findMany({
+  const [missions, materialReads, progress, challengeAnswers] = await Promise.all([
+    prisma.mission.findMany({
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        materialId: true,
+        material: { select: { title: true, content: true } },
+        levels: { select: { _count: { select: { challenges: true } } } }
+      },
+      orderBy: { createdAt: "desc" }
+    }),
+    prisma.studentMaterialRead.findMany({ where: { studentId: user.id }, select: { materialId: true } }),
+    prisma.studentMissionProgress.findMany({ where: { studentId: user.id }, select: { status: true } }),
+    prisma.studentChallengeAnswer.findMany({
       where: { studentId: user.id },
-      include: { challenge: { include: { level: true } } }
-    });
+      select: { challenge: { select: { level: { select: { missionId: true } } } } }
+    })
+  ]);
   const completed = progress.filter((item) => item.status === "COMPLETED").length;
   const overallProgress = missions.length ? Math.round((completed / missions.length) * 100) : 0;
 
@@ -98,7 +107,7 @@ export default async function StudentDashboard() {
                         <p className="mt-2 line-clamp-2 text-sm font-semibold leading-6 text-slate-500">{mission.material.content}</p>
                       ) : null}
                       <div className="mt-4 flex flex-wrap gap-2 text-sm font-black text-slate-600">
-                        <span className="rounded-lg border-2 border-leaf/20 bg-leaf/10 px-3 py-2 text-leafDark">{mission.levels.reduce((sum, level) => sum + level.challenges.length, 0)} soal quiz</span>
+                        <span className="rounded-lg border-2 border-leaf/20 bg-leaf/10 px-3 py-2 text-leafDark">{mission.levels.reduce((sum, level) => sum + level._count.challenges, 0)} soal kuis</span>
                       </div>
                     </div>
                     <div className="rounded-lg border-2 border-slate-100 bg-slate-50 p-3">

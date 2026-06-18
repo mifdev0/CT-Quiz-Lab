@@ -118,3 +118,13 @@ textarea {
 .gentle-pulse {
   animation: gentle-pulse 1.4s ease-in-out infinite;
 }
+
+@keyframes route-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.route-spinner {
+  animation: route-spin 0.8s linear infinite;
+}

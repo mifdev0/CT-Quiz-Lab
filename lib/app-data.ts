@@ -22,6 +22,15 @@ export const pillars = [
   { key: "algorithm", title: "Algorithmic Thinking", short: "Susun Langkah", icon: GitBranch, color: "bg-coral" }
 ];
 
+// Metadata soal tetap memakai pilar CT, tetapi hasil belajar ditampilkan sebagai
+// capaian yang lebih mudah dipahami guru dan siswa.
+export const learningOutcomes = [
+  { key: "decomposition", title: "Memahami Masalah", short: "Memahami persoalan dan bagian-bagiannya", icon: Puzzle, color: "bg-leaf" },
+  { key: "pattern", title: "Mengenali Informasi", short: "Menemukan hubungan dan informasi yang berulang", icon: Search, color: "bg-sky" },
+  { key: "abstraction", title: "Menganalisis Materi", short: "Memilih informasi yang relevan untuk menjawab soal", icon: Filter, color: "bg-honey" },
+  { key: "algorithm", title: "Menerapkan Konsep", short: "Menggunakan materi untuk menentukan penyelesaian", icon: GitBranch, color: "bg-coral" }
+];
+
 export const pillarLabels: Record<CTPillar | string, { title: string; short: string; helper: string }> = {
   DECOMPOSITION: {
     title: "Decomposition",
