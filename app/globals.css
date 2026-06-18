@@ -128,3 +128,16 @@ textarea {
 .route-spinner {
   animation: route-spin 0.8s linear infinite;
 }
+
+@keyframes navigation-progress {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+.navigation-progress {
+  animation: navigation-progress 1s ease-in-out infinite;
+}

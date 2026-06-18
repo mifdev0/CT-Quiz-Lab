@@ -13,16 +13,26 @@ export default async function MissionPage({ searchParams }: { searchParams?: { m
   const mission = searchParams?.mission
     ? await prisma.mission.findUnique({
         where: { id: searchParams.mission },
-        include: { material: true, tests: { include: { questions: true } }, levels: { orderBy: { order: "asc" }, include: { challenges: { include: { options: { orderBy: { order: "asc" } } } } } } }
+        include: { material: true, levels: { orderBy: { order: "asc" }, include: { challenges: { include: { options: { orderBy: { order: "asc" } } } } } } }
       })
     : await prisma.mission.findFirst({
-        include: { material: true, tests: { include: { questions: true } }, levels: { orderBy: { order: "asc" }, include: { challenges: { include: { options: { orderBy: { order: "asc" } } } } } } }
+        include: { material: true, levels: { orderBy: { order: "asc" }, include: { challenges: { include: { options: { orderBy: { order: "asc" } } } } } } }
       });
   const challenges = mission?.levels.flatMap((level) => level.challenges.map((challenge) => ({ ...challenge, level }))) || [];
-  const alreadyDone = challenges.length ? await prisma.studentChallengeAnswer.findFirst({ where: { studentId: user.id, challengeId: { in: challenges.map((challenge) => challenge.id) } } }) : null;
-  const materialRead = mission?.materialId
-    ? await prisma.studentMaterialRead.findUnique({ where: { studentId_materialId: { studentId: user.id, materialId: mission.materialId } } })
-    : null;
+  const [alreadyDone, materialRead] = await Promise.all([
+    challenges.length
+      ? prisma.studentChallengeAnswer.findFirst({
+          where: { studentId: user.id, challengeId: { in: challenges.map((challenge) => challenge.id) } },
+          select: { id: true }
+        })
+      : null,
+    mission?.materialId
+      ? prisma.studentMaterialRead.findUnique({
+          where: { studentId_materialId: { studentId: user.id, materialId: mission.materialId } },
+          select: { id: true }
+        })
+      : null
+  ]);
 
   return (
     <AppShell role="Siswa" title="Kuis Interaktif" nav={studentNav} userName={user.name}>
